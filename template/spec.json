@@ -1,0 +1,103 @@
+{
+  "canvas": {
+    "largura": 1080,
+    "altura": 1350,
+    "formato": "PNG"
+  },
+  "cores": {
+    "fundo": "#0D0D0D",
+    "titulo": "#FFFFFF",
+    "subtitulo": "#D0D0D0",
+    "handle_bg": "#1A1A1A",
+    "handle_text": "#FFFFFF",
+    "navegacao": "#666666",
+    "card_cta_bg": "#FFFFFF",
+    "card_cta_text": "#0D0D0D"
+  },
+  "tipografia": {
+    "titulo": {
+      "fonte": "BricolageGrotesque-Bold.ttf",
+      "tamanho": 58,
+      "peso": "bold"
+    },
+    "subtitulo": {
+      "fonte": "BricolageGrotesque-Regular.ttf",
+      "tamanho": 30,
+      "peso": "regular"
+    },
+    "handle": {
+      "fonte": "BricolageGrotesque-Regular.ttf",
+      "tamanho": 24,
+      "pilula_raio": 20
+    },
+    "navegacao": {
+      "fonte": "BricolageGrotesque-Regular.ttf",
+      "tamanho": 22,
+      "alinhamento": "direita"
+    },
+    "cta_destaque": {
+      "fonte": "BricolageGrotesque-Bold.ttf",
+      "tamanho": 64
+    }
+  },
+  "layout": {
+    "margem_lateral": 60,
+    "margem_topo": 60,
+    "margem_rodape": 60,
+    "espacamento_titulo_subtitulo": 24,
+    "espacamento_subtitulo_imagem": 36,
+    "imagem_border_radius": 24,
+    "card_cta_border_radius": 24,
+    "card_cta_altura": 220
+  },
+  "tipos_de_slide": {
+    "capa": {
+      "descricao": "Slide 1 - gradiente branco para preto no topo, título grande na parte inferior",
+      "tem_imagem": false,
+      "tem_subtitulo": false,
+      "gradiente": true
+    },
+    "corpo": {
+      "descricao": "Slides intermediários - título + subtítulo + imagem arredondada + rodapé",
+      "tem_imagem": true,
+      "tem_subtitulo": true,
+      "gradiente": false
+    },
+    "cta": {
+      "descricao": "Último slide - título + subtítulo + card branco com texto de destaque em bold",
+      "tem_imagem": false,
+      "tem_subtitulo": true,
+      "tem_card_destaque": true,
+      "gradiente": false
+    }
+  },
+  "rodape": {
+    "handle_posicao": "esquerda",
+    "navegacao_texto": "Arrasta para o lado >",
+    "navegacao_posicao": "direita"
+  },
+  "regras_de_texto": {
+    "titulo": [
+      "Máximo de 10 palavras",
+      "Usar dado concreto quando disponível (números, estatísticas)",
+      "Fórmulas: '{Número} {fato}', 'Como {resultado} em {tempo}', 'O problema de {situação}'",
+      "Específico sobre vago: '7.900 stars no GitHub' é melhor que 'ferramenta popular'",
+      "Verbo de ação no início quando possível"
+    ],
+    "subtitulo": [
+      "Máximo de 30 palavras",
+      "Explicar a consequência ou benefício do título",
+      "Usar linguagem do leitor, sem jargão",
+      "Uma ideia por slide, nunca dois pontos distintos"
+    ],
+    "cta_destaque": [
+      "Máximo de 4 palavras em caixa alta",
+      "Formato: COMENTA + palavra/número",
+      "Ex: COMENTA '2803', COMENTA 'IA', SALVA ESSE POST"
+    ],
+    "cta_subtitulo": [
+      "Dizer exatamente o que o leitor recebe ao fazer a ação",
+      "Ex: Comenta X para receber o link + passo a passo completo"
+    ]
+  }
+}
