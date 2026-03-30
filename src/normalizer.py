@@ -93,11 +93,14 @@ def _extrair_fatos(insights: list[dict], tema: str) -> dict:
         stopwords_ent = {"Como", "Qual", "Por", "Que", "Este", "Esta", "Esse", "Essa",
                          "Conheça", "Descubra", "Entenda", "Veja", "Saiba", "Explore",
                          "Neste", "Nesta", "Para", "Pela", "Pelo", "Segundo", "Sobre",
-                         "Inteligência", "Artificial", "Tecnologia", "Dados", "Empresas",
+                         "Inteligência", "Artificial", "Inteligência Artificial", "Tecnologia", "Dados", "Empresas",
                          "Avanço", "Personalização", "Automação", "Eficiência",
-                         "Desafios", "Resultados", "Nova", "Novo", "Mais"}
+                         "Desafios", "Resultados", "Nova", "Novo", "Mais",
+                         "Infraestrutura", "Produtividade", "Saúde", "Impacto",
+                         "Operacional", "Transformação", "Inovação", "Digital",
+                         "Mundo", "Brasil", "Corporativo", "Gestão", "Pesquisa"}
         for ent in entidades:
-            if ent not in stopwords_ent and len(ent) > 3:
+            if ent not in stopwords_ent and ent.split()[0] not in stopwords_ent and len(ent) > 3:
                 fatos["entidades"].append(ent)
 
         # Classificar frases por categoria
@@ -126,10 +129,10 @@ def _extrair_fatos(insights: list[dict], tema: str) -> dict:
         if any(p in texto_lower for p in palavras_tendencia):
             fatos["tendencias"].append(_limpar_frase(texto_completo))
 
-        # Guardar frases úteis completas (de descrições com >8 palavras)
+        # Guardar frases úteis completas (de descrições com >8 palavras, já limpas)
         for frase in re.split(r"[.!?]", desc):
-            frase = frase.strip()
-            if len(frase.split()) >= 8 and len(frase.split()) <= 30:
+            frase = _limpar_frase_texto(frase.strip())
+            if frase and len(frase.split()) >= 8 and len(frase.split()) <= 35:
                 fatos["frases_uteis"].append(frase)
 
     # Deduplicar entidades
@@ -175,6 +178,43 @@ def _limpar_frase(texto: str) -> str:
     return texto[:300]
 
 
+def _limpar_frase_texto(texto: str) -> str:
+    """Limpa uma frase individual. Retorna '' se lixo."""
+    texto = re.sub(r"https?://\S+", "", texto)
+    texto = re.sub(r"#\w+", "", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+    texto = re.sub(r"^\.{3}\s*", "", texto)
+    texto = re.sub(r"…", "", texto)
+    texto = re.sub(r"^(\d{1,2}\s+)?de\s+\w{3,10}\.?\s*(de\s+\d{4})?\s*[-–—]\s*", "", texto).strip()
+    texto = re.sub(r"^h[aá]\s+\d+\s+\w+\s*[-–—·]\s*", "", texto, flags=re.IGNORECASE).strip()
+    texto = re.sub(r"\s*·\s*", ". ", texto).strip()
+    texto = re.sub(r"\s*[-–—|]\s*[A-Z][\w\s]{0,25}$", "", texto).strip()
+    texto = texto.strip(".,;:- ")
+    if not texto:
+        return ""
+    if texto == texto.upper() and len(texto) > 10:
+        return ""
+    lixo = [r"(?i)^comments?\b", r"(?i)\bcanal\s+\d", r"(?i)\bclarotv",
+            r"(?i)\bsky\b.*\bcanal", r"(?i)^subscribe\b", r"(?i)\bcookie",
+            r"(?i)\d+:\d+\b", r"(?i)^mundo no brasil"]
+    for pat in lixo:
+        if re.search(pat, texto):
+            return ""
+    palavras = texto.split()
+    finais_ruins = {"de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+                    "o", "a", "os", "as", "um", "uma", "e", "ou", "para", "com", "que",
+                    "à", "além", "desde", "entre", "sobre", "até", "suas", "seus"}
+    if palavras and palavras[-1].lower().rstrip(",;:") in finais_ruins:
+        return ""
+    if texto.endswith(","):
+        return ""
+    if len(palavras) < 6:
+        return ""
+    if _parece_ingles(texto):
+        texto = _traduzir_descricao(texto)
+    return texto
+
+
 # ─────────────────────────────────────────────
 # Montagem da narrativa progressiva
 # ─────────────────────────────────────────────
@@ -186,7 +226,7 @@ def _montar_narrativa(tema: str, fatos: dict, insights: list[dict]) -> list[dict
     """
     slides = []
     queries_usadas = set()
-    subtitulos_usados = set()
+    textos_usados = set()
     titulos_usados = set()
 
     # ── SLIDE 1: CAPA (gancho) ──
@@ -206,14 +246,14 @@ def _montar_narrativa(tema: str, fatos: dict, insights: list[dict]) -> list[dict
     for papel in papeis:
         titulo = _gerar_titulo_papel(tema, fatos, papel, titulos_usados)
         titulos_usados.add(titulo)
-        sub = _gerar_subtitulo_narrativo(fatos, papel, tema, subtitulos_usados, titulo_slide=titulo)
-        subtitulos_usados.add(sub)
+        texto = _gerar_texto_narrativo(fatos, papel, tema, textos_usados, titulo_slide=titulo)
+        textos_usados.add(texto)
         query = _gerar_query_imagem_papel(papel, tema, queries_usadas)
         queries_usadas.add(query)
         slides.append({
             "tipo": "corpo",
             "titulo": titulo,
-            "subtitulo": sub,
+            "texto": texto,
             "query_imagem": query,
         })
 
@@ -359,6 +399,17 @@ def _extrair_titulo_de_frase(frase: str) -> str | None:
     if texto == texto.upper() and len(texto) > 5:
         texto = texto.title()
 
+    # Rejeitar lixo do scraper
+    lixo_patterns = [
+        r"(?i)\bcanal\s+\d", r"(?i)\bclarotv", r"(?i)\bsky\b.*\bcanal",
+        r"(?i)^comments?\b", r"(?i)^subscribe\b", r"(?i)\bcookie",
+        r"(?i)\d+:\d+\b",  # timestamps como "24:25"
+        r"(?i)^mundo no brasil",
+    ]
+    for pat in lixo_patterns:
+        if re.search(pat, texto):
+            return None
+
     if len(texto.split()) < 3:
         return None
 
@@ -366,249 +417,97 @@ def _extrair_titulo_de_frase(frase: str) -> str | None:
 
 
 # ─────────────────────────────────────────────
-# Geração de subtítulos narrativos
+# Geração de texto narrativo (parágrafo 40-60 palavras)
 # ─────────────────────────────────────────────
 
-def _gerar_subtitulo_narrativo(fatos: dict, papel: str, tema: str,
-                                usados: set[str], titulo_slide: str = "") -> str:
+def _gerar_texto_narrativo(fatos: dict, papel: str, tema: str,
+                            usados: set[str], titulo_slide: str = "") -> str:
     """
-    Gera subtítulo usando dados reais do Apify, específico para cada papel.
-    Nunca usa templates genéricos. Garante unicidade.
-    Evita sobreposição com o título do mesmo slide.
+    Gera parágrafo narrativo de 40-60 palavras com 3 frases conectadas.
+    Usa fatos limpos (números, entidades) do Apify dentro de templates polidos.
+    Nunca insere texto bruto do scraper diretamente.
     """
-    candidatos = []
-
-    if papel == "antes":
-        for frase in fatos["problemas"]:
-            sub = _extrair_subtitulo_de_frase(frase, evitar=titulo_slide)
-            if sub and sub not in usados:
-                candidatos.append(sub)
-        for frase in fatos["frases_uteis"]:
-            if any(p in _remover_acentos(frase.lower()) for p in
-                   ["antes", "manual", "sem", "antigo", "tradicional", "limitado"]):
-                sub = _limpar_subtitulo(frase)
-                if sub and sub not in usados:
-                    candidatos.append(sub)
-        if not candidatos:
-            candidatos = _subtitulos_papel_especifico("antes", tema, fatos)
-
-    elif papel == "virada":
-        for frase in fatos["mudancas"]:
-            sub = _extrair_subtitulo_de_frase(frase, evitar=titulo_slide)
-            if sub and sub not in usados:
-                candidatos.append(sub)
-        for frase in fatos["frases_uteis"]:
-            if any(p in _remover_acentos(frase.lower()) for p in
-                   ["transformou", "revolucion", "mudou", "chegou", "inovacao", "generativa"]):
-                sub = _limpar_subtitulo(frase)
-                if sub and sub not in usados:
-                    candidatos.append(sub)
-        if not candidatos:
-            candidatos = _subtitulos_papel_especifico("virada", tema, fatos)
-
-    elif papel == "prova":
-        for num in fatos["numeros"]:
-            ctx = num["contexto"]
-            sub = _extrair_subtitulo_de_frase(ctx, evitar=titulo_slide)
-            if sub and sub not in usados:
-                candidatos.append(sub)
-        for frase in fatos["frases_uteis"]:
-            if re.search(r"\d[\d.,]*\s*%?", frase):
-                sub = _limpar_subtitulo(frase)
-                if sub and sub not in usados:
-                    candidatos.append(sub)
-        if not candidatos:
-            candidatos = _subtitulos_papel_especifico("prova", tema, fatos)
-
-    elif papel == "aplicacao":
-        for frase in fatos["aplicacoes"]:
-            sub = _extrair_subtitulo_de_frase(frase, evitar=titulo_slide)
-            if sub and sub not in usados:
-                candidatos.append(sub)
-        for frase in fatos["frases_uteis"]:
-            if any(p in _remover_acentos(frase.lower()) for p in
-                   ["pratica", "exemplo", "empresa", "automacao", "ferramenta", "processo"]):
-                sub = _limpar_subtitulo(frase)
-                if sub and sub not in usados:
-                    candidatos.append(sub)
-        if not candidatos:
-            candidatos = _subtitulos_papel_especifico("aplicacao", tema, fatos)
-
-    elif papel == "futuro":
-        for frase in fatos["tendencias"]:
-            sub = _extrair_subtitulo_de_frase(frase, evitar=titulo_slide)
-            if sub and sub not in usados:
-                candidatos.append(sub)
-        for frase in fatos["frases_uteis"]:
-            if any(p in _remover_acentos(frase.lower()) for p in
-                   ["futuro", "tendencia", "previsao", "2025", "2026", "proximo", "crescer"]):
-                sub = _limpar_subtitulo(frase)
-                if sub and sub not in usados:
-                    candidatos.append(sub)
-        if not candidatos:
-            candidatos = _subtitulos_papel_especifico("futuro", tema, fatos)
-
-    # Verificar similaridade com o título do slide
-    titulo_palavras = set(_remover_acentos(titulo_slide.lower()).split()) if titulo_slide else set()
-
-    # Retornar o primeiro candidato válido que não repete e não é igual ao título
-    for sub in candidatos:
-        if sub not in usados and len(sub.split()) >= 8:
-            sub_palavras = set(_remover_acentos(sub.lower()).split())
-            # Rejeitar se >60% de sobreposição com o título
-            if titulo_palavras and sub_palavras:
-                overlap = len(sub_palavras & titulo_palavras) / len(sub_palavras)
-                if overlap > 0.6:
-                    continue
-            return sub
-
-    # Último recurso: pegar qualquer frase útil não usada e não similar ao título
-    for frase in fatos["frases_uteis"]:
-        sub = _limpar_subtitulo(frase)
-        if sub and sub not in usados and len(sub.split()) >= 8:
-            sub_palavras = set(_remover_acentos(sub.lower()).split())
-            if titulo_palavras:
-                overlap = len(sub_palavras & titulo_palavras) / len(sub_palavras)
-                if overlap > 0.6:
-                    continue
-            return sub
-
-    # Fallback final por papel (nunca o template genérico antigo)
-    return _subtitulos_papel_especifico(papel, tema, fatos)[0]
-
-
-def _extrair_subtitulo_de_frase(texto: str, evitar: str = "") -> str | None:
-    """Extrai um subtítulo limpo de uma frase dos dados brutos.
-    Prefere frases que não se sobreponham com 'evitar' (tipicamente o título)."""
-    partes = re.split(r"[.!?]", texto)
-    evitar_palavras = set(_remover_acentos(evitar.lower()).split()) if evitar else set()
-
-    # Tentar frases que NÃO se sobrepõem com o título
-    for parte in partes[1:]:
-        sub = _limpar_subtitulo(parte.strip())
-        if sub and len(sub.split()) >= 8:
-            sub_palavras = set(_remover_acentos(sub.lower()).split())
-            if not evitar_palavras or len(sub_palavras & evitar_palavras) / max(len(sub_palavras), 1) < 0.5:
-                return sub
-
-    # Tentar a primeira frase se não sobrepõe
-    if partes:
-        sub = _limpar_subtitulo(partes[0].strip())
-        if sub and len(sub.split()) >= 8:
-            sub_palavras = set(_remover_acentos(sub.lower()).split())
-            if not evitar_palavras or len(sub_palavras & evitar_palavras) / max(len(sub_palavras), 1) < 0.5:
-                return sub
-
-    # Último recurso: qualquer frase válida
-    for parte in partes:
-        sub = _limpar_subtitulo(parte.strip())
-        if sub and len(sub.split()) >= 8:
-            return sub
-    return None
-
-
-def _limpar_subtitulo(texto: str) -> str | None:
-    """Limpa e valida texto como subtítulo."""
-    texto = re.sub(r"https?://\S+", "", texto)
-    texto = re.sub(r"#\w+", "", texto)
-    texto = re.sub(r"\s+", " ", texto).strip()
-    texto = re.sub(r"^\.{3}\s*", "", texto)
-    texto = re.sub(r"\s*\.{3}\s*$", "", texto)
-    texto = re.sub(r"…", "", texto)
-    # Remover prefixos de data: "de 2025 —", "27 de abr. de 2025 —"
-    texto = re.sub(
-        r"^(\d{1,2}\s+)?de\s+\w{3,10}\.?\s*(de\s+\d{4})?\s*[-–—]\s*",
-        "", texto
-    ).strip()
-    # Remover prefixos de tempo relativo: "há 3 dias —", "há 1 semana —"
-    texto = re.sub(
-        r"^h[aá]\s+\d+\s+\w+\s*[-–—·]\s*",
-        "", texto, flags=re.IGNORECASE
-    ).strip()
-    # Remover "· separadores" soltos no meio
-    texto = re.sub(r"\s*·\s*", ". ", texto).strip()
-    # Remover vírgula ou ponto final solto no fim
-    texto = texto.rstrip(".,;:- ")
-
-    if _parece_ingles(texto):
-        texto = _traduzir_descricao(texto)
-
-    # Limitar a 30 palavras
-    palavras = texto.split()
-    if len(palavras) > 30:
-        texto = " ".join(palavras[:30])
-
-    # Não terminar em preposição, artigo ou palavra solta
-    finais_ruins = {"de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
-                    "o", "a", "os", "as", "um", "uma", "e", "ou", "para", "com", "que", "à"}
-    while texto.split() and texto.split()[-1].lower() in finais_ruins:
-        partes = texto.split()
-        if len(partes) <= 8:
-            break
-        texto = " ".join(partes[:-1])
-
-    texto = texto.rstrip(".,;:- ")
-
-    if len(texto.split()) < 8:
-        return None
-
-    if _parece_fragmento(texto):
-        return None
-
-    return texto
-
-
-def _subtitulos_papel_especifico(papel: str, tema: str, fatos: dict) -> list[str]:
-    """
-    Fallbacks específicos por papel narrativo, usando entidades/números quando possível.
-    Nunca usa o padrão 'Entenda como X pode transformar...'.
-    """
-    entidade = fatos["entidades"][0] if fatos["entidades"] else "grandes empresas"
+    entidade = fatos["entidades"][0] if fatos["entidades"] else ""
     numero = fatos["numeros"][0]["valor"] if fatos["numeros"] else ""
 
+    # Parágrafos por papel, com slots para dados reais do Apify
     if papel == "antes":
-        return [
-            f"Relatorios manuais, decisoes por intuicao e processos que levavam semanas para serem concluidos",
-            f"Antes da IA, equipes inteiras gastavam horas em tarefas que hoje um algoritmo resolve em minutos",
-            f"Planilhas interminaveis e analises lentas eram o padrao no mundo corporativo antes da automacao",
-        ]
-    if papel == "virada":
-        if entidade != "grandes empresas":
-            return [
-                f"{entidade} e outras empresas comecaram a integrar IA nos seus processos e os resultados surpreenderam",
-                f"A chegada da IA generativa permitiu que empresas como {entidade} automatizassem decisoes complexas",
-                f"Ferramentas de inteligencia artificial passaram a fazer em segundos o que antes exigia equipes inteiras",
-            ]
-        return [
-            f"A IA generativa chegou ao mercado corporativo e abriu possibilidades que antes pareciam ficao cientifica",
-            f"Ferramentas de inteligencia artificial passaram a fazer em segundos o que antes exigia equipes inteiras",
-            f"Empresas que adotaram IA primeiro ganharam vantagem competitiva significativa sobre a concorrencia",
-        ]
-    if papel == "prova":
+        texto = (
+            "Antes da inteligencia artificial, equipes corporativas dependiam de processos manuais e demorados. "
+            "Relatorios levavam dias para ficarem prontos, decisoes eram tomadas por intuicao e o retrabalho consumia boa parte do expediente. "
+            "O custo dessa ineficiencia era invisivel nos balancetes, mas impactava diretamente os resultados de cada trimestre."
+        )
+
+    elif papel == "virada":
+        if entidade:
+            texto = (
+                f"Empresas como {entidade} foram pioneiras ao integrar inteligencia artificial nos processos internos e os resultados surpreenderam. "
+                "Ferramentas de IA generativa passaram a produzir relatorios, analisar contratos e automatizar atendimento em minutos. "
+                "O tempo que antes era gasto em tarefas repetitivas foi redirecionado para planejamento e decisoes estrategicas."
+            )
+        else:
+            texto = (
+                "A chegada da IA generativa ao mercado corporativo mudou completamente a forma como empresas operam no dia a dia. "
+                "Ferramentas como ChatGPT Enterprise e Copilot passaram a gerar analises, resumir documentos e responder clientes sem intervencao humana. "
+                "O tempo que antes era gasto em tarefas repetitivas foi redirecionado para planejamento e decisoes estrategicas."
+            )
+
+    elif papel == "prova":
         if numero:
-            return [
-                f"Empresas que adotaram IA relatam {numero} de melhoria em eficiencia operacional e reducao de custos",
-                f"Os dados mostram {numero} de ganho real, comprovando que a IA nao e apenas tendencia mas necessidade",
-                f"Pesquisas indicam que {numero} dos resultados melhoram quando IA e aplicada de forma estrategica",
-            ]
-        return [
-            f"Empresas que implementaram IA relatam reducao significativa de custos e aumento de produtividade",
-            f"Estudos mostram que a automacao inteligente reduz erros operacionais e acelera a tomada de decisao",
-            f"Organizacoes com IA integrada entregam resultados ate tres vezes mais rapido que concorrentes tradicionais",
-        ]
-    if papel == "aplicacao":
-        return [
-            f"Automacao de processos, analise preditiva e atendimento inteligente ja sao realidade nas empresas",
-            f"Na pratica a IA analisa dados em tempo real, antecipa demandas e otimiza operacoes sem intervencao manual",
-            f"Do RH ao financeiro, cada departamento corporativo ja tem ferramentas de IA que simplificam rotinas",
-        ]
-    if papel == "futuro":
-        return [
-            f"Ate 2027, empresas sem IA integrada terao dificuldade de competir no mercado corporativo",
-            f"A proxima onda sera agentes autonomos de IA tomando decisoes operacionais em tempo real",
-            f"Quem nao comecar a adaptar seus processos agora vai perder espaco para concorrentes mais ageis",
-        ]
-    return [f"A transformacao digital continua acelerando e as oportunidades sao reais para quem se posiciona agora"]
+            texto = (
+                f"Pesquisas recentes mostram que empresas com IA integrada apresentam ganhos de {numero} em produtividade por colaborador. "
+                "Esses numeros refletem reducao de erros operacionais, maior velocidade na tomada de decisao e otimizacao de recursos humanos e financeiros. "
+                "Nao se trata mais de tendencia: e vantagem competitiva comprovada por dados reais de mercado."
+            )
+        else:
+            texto = (
+                "Estudos recentes comprovam que a adocao de IA gera resultados mensuráveis em produtividade e reducao de custos operacionais. "
+                "Empresas adotantes relatam decisoes mais rapidas, menos retrabalho e equipes mais focadas em atividades de alto valor estrategico. "
+                "Nao se trata mais de tendencia: e vantagem competitiva comprovada por dados reais de mercado."
+            )
+
+    elif papel == "aplicacao":
+        texto = (
+            "Na pratica, a IA ja esta presente em departamentos como financeiro, RH, atendimento ao cliente e operacoes logisticas. "
+            "Dashboards inteligentes respondem perguntas em tempo real, chatbots resolvem demandas sem fila e algoritmos preveem gargalos antes que acontecam. "
+            "Qualquer empresa pode comecar com ferramentas acessiveis hoje e escalar conforme os primeiros resultados aparecem."
+        )
+
+    elif papel == "futuro":
+        texto = (
+            "A proxima fase da IA corporativa envolve agentes autonomos capazes de executar fluxos completos de trabalho sem supervisao humana. "
+            "Empresas que nao integrarem inteligencia artificial nos seus processos ate 2027 perderao competitividade para concorrentes mais ageis e enxutos. "
+            "O momento de comecar e agora, e quem se posicionar primeiro colhe os maiores resultados do mercado."
+        )
+
+    else:
+        texto = (
+            "A transformacao digital segue acelerando em todos os setores da economia e as oportunidades sao reais para quem age rapido. "
+            "Empresas que investem em inteligencia artificial agora estao construindo vantagens que serao dificeis de alcançar depois. "
+            "O diferencial nao e mais a tecnologia em si, mas a velocidade com que cada organizacao decide adota-la."
+        )
+
+    return _ajustar_paragrafo(texto)
+
+
+def _ajustar_paragrafo(texto: str) -> str:
+    """Limpa e ajusta parágrafo para 40-60 palavras."""
+    texto = re.sub(r"\.{2,}", ".", texto)
+    texto = re.sub(r"\.\s*\.", ".", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+
+    palavras = texto.split()
+    if len(palavras) > 60:
+        texto_cortado = " ".join(palavras[:60])
+        ultimo_ponto = texto_cortado.rfind(".")
+        if ultimo_ponto > len(texto_cortado) // 2:
+            texto = texto_cortado[:ultimo_ponto + 1]
+        else:
+            texto = texto_cortado.rstrip(".,;:- ") + "."
+
+    if texto and texto[-1] not in ".!?":
+        texto += "."
+    return texto
 
 
 # ─────────────────────────────────────────────
@@ -646,12 +545,19 @@ def _gerar_titulo_capa(tema: str, fatos: dict) -> str:
     Gera o título da capa: impactante, máximo 10 palavras.
     Tenta usar dado concreto dos fatos extraídos.
     """
-    # Tentar com número real
-    if fatos["numeros"]:
-        num = fatos["numeros"][0]
+    # Tentar com número real (percentuais são mais confiáveis)
+    for num in fatos["numeros"]:
         valor = num["valor"]
-        # Construir título com o número
-        return _limitar_palavras(f"IA no mundo corporativo: {valor} de mudanca real", 10)
+        # Preferir percentuais, rejeitar números que parecem lixo (canais de TV, timestamps)
+        if "%" in valor:
+            return _limitar_palavras(f"IA no mundo corporativo: {valor} de mudanca real", 10)
+    # Tentar qualquer número > 2 dígitos que não pareça lixo
+    for num in fatos["numeros"]:
+        valor = num["valor"]
+        if re.match(r"^\d{1,3}$", valor) and int(valor) > 100:
+            continue  # provavelmente canal de TV ou número sem contexto
+        if "%" not in valor:
+            return _limitar_palavras(f"IA no mundo corporativo: {valor} de mudanca real", 10)
 
     # Tentar com entidade real
     if fatos["entidades"]:
@@ -723,7 +629,8 @@ def _limitar_palavras(texto: str, maximo: int) -> str:
     texto = " ".join(palavras[:maximo])
     # Não terminar em preposição ou artigo
     finais_ruins = {"de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
-                    "o", "a", "os", "as", "um", "uma", "e", "ou", "para", "com", "que"}
+                    "o", "a", "os", "as", "um", "uma", "e", "ou", "para", "com", "que",
+                    "já", "ja", "ao", "à", "pelo", "pela", "seus", "suas", "este", "esta"}
     while texto.split() and texto.split()[-1].lower() in finais_ruins:
         palavras_cortadas = texto.split()
         if len(palavras_cortadas) <= 3:
